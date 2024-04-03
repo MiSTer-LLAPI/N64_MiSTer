@@ -610,8 +610,7 @@ always @(posedge clk_1x) begin
 end
 
 // Pop OSD menu if no rom has been loaded automatically
-//LLAPI: OSD combinaison
-assign BUTTONS   = llapi_osd;
+assign BUTTONS[0]   = osd_btn | llapi_osd;
 //LLAPI
 assign BUTTONS[1] = 0;
 
