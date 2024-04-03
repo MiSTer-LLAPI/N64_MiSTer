@@ -16,6 +16,7 @@
 //  with this program; if not, write to the Free Software Foundation, Inc.,
 //  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //============================================================================
+//LLAPI: llapi.sv needs to be in rtl folder and needs to be declared in file.qip (set_global_assignment -name SYSTEMVERILOG_FILE rtl/llapi.sv)
 
 module emu
 (
@@ -291,6 +292,12 @@ parameter CONF_STR = {
    "FS1,N64z64n64v64,Load,32000000;",
    "F2,GBCGB ,Load GB-Transfer;",
    "-;",
+    //LLAPI: OSD menu item
+	//LLAPI Always ON
+	"-,<< LLAPI enabled >>;",
+	"-,<< Use USER I/O port >>;",
+	"-;",
+	//END LLAPI	
    "C,Cheats;",
    "O[103],Cheats Enabled,Yes,No;",
    "-;",
@@ -397,22 +404,37 @@ wire  [1:0] buttons;
 wire [127:0] status;
 wire        forced_scandoubler;
 
+//LLAPI rename HPS controller to USB
+
+wire [19:0] joy_usb_0;
+wire [19:0] joy_usb_1;
+wire [19:0] joy_usb_2;
+wire [19:0] joy_usb_3;
+
 wire [19:0] joy;
 wire [19:0] joy_unmod;
 wire [19:0] joy2;
 wire [19:0] joy3;
 wire [19:0] joy4;
 
+wire [15:0] joystick_usb_analog_l0;
+wire [15:0] joystick_usb_analog_l1;
+wire [15:0] joystick_usb_analog_l2;
+wire [15:0] joystick_usb_analog_l3;
+
 wire [15:0] joystick_analog_l0;
 wire [15:0] joystick_analog_l1;
 wire [15:0] joystick_analog_l2;
 wire [15:0] joystick_analog_l3;
+
+//END LLAPI
 
 wire [24:0] mouse;
 
 wire [10:0] ps2_key;
 
 wire [127:0] status_in = {status[127:40],ss_slot,status[37:0]};
+ 
 wire [15:0] status_menumask = {14'd0, status[105], status[82]};
 
 wire DIRECT_VIDEO;
@@ -458,10 +480,12 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(1)) hps_io
 	.ioctl_index(ioctl_index),
 	.ioctl_wait(ioctl_wait),
 
-   .joystick_0(joy_unmod),
-	.joystick_1(joy2),
-	.joystick_2(joy3),
-	.joystick_3(joy4),
+//LLAPI HPS controller renamed to usb
+	.joystick_0(joy_unmod),
+	.joystick_1(joy_usb_1),
+	.joystick_2(joy_usb_2),
+	.joystick_3(joy_usb_3),
+//END LLAPI
 	.ps2_key(ps2_key),
 
 	.status(status),
@@ -472,10 +496,12 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(1)) hps_io
 	.info_req(info_req),
 	.info(info_index),
    
-   .joystick_l_analog_0(joystick_analog_l0), 
-   .joystick_l_analog_1(joystick_analog_l1),
-   .joystick_l_analog_2(joystick_analog_l2),
-   .joystick_l_analog_3(joystick_analog_l3),
+//LLAPI HPS controller renamed to usb
+   .joystick_l_analog_0(joystick_usb_analog_l0),  
+   .joystick_l_analog_1(joystick_usb_analog_l1),   
+   .joystick_l_analog_2(joystick_usb_analog_l2),   
+   .joystick_l_analog_3(joystick_usb_analog_l3),
+ //LAPI END
    
    .joystick_0_rumble(rumble[0] ? 16'hFFFF : 16'h0000),
    .joystick_1_rumble(rumble[1] ? 16'hFFFF : 16'h0000),
@@ -500,7 +526,9 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(1)) hps_io
    .direct_video(DIRECT_VIDEO)
 );
 
-assign joy = joy_unmod; //joy_unmod[14] ? 20'b0 : joy_unmod;
+//LLAPI
+assign joy_usb_0 = joy_unmod; //joy_unmod[14] ? 20'b0 : joy_unmod;
+//LLAPI
 
 ////////////////////////////  PIFROM download  ///////////////////////////////////
 
@@ -582,7 +610,9 @@ always @(posedge clk_1x) begin
 end
 
 // Pop OSD menu if no rom has been loaded automatically
-assign BUTTONS[0] = osd_btn;
+//LLAPI: OSD combinaison
+assign BUTTONS   = llapi_osd;
+//LLAPI
 assign BUTTONS[1] = 0;
 
 reg osd_btn = 0;
@@ -694,6 +724,216 @@ always @(posedge clk_1x) begin
 		use_img <= 1;
 	end
 end
+
+//////////////////   LLAPI   ///////////////////
+
+wire [31:0] llapi_buttons, llapi_buttons2;
+wire [71:0] llapi_analog, llapi_analog2;
+wire [7:0]  llapi_type, llapi_type2;
+wire llapi_en, llapi_en2;
+
+wire llapi_select = 1'b1;
+
+wire llapi_latch_o, llapi_latch_o2, llapi_data_o, llapi_data_o2;
+
+// LLAPI Indexes:
+// 0 = D+    = P1 Latch
+// 1 = D-    = P1 Data
+// 2 = TX-   = LLAPI Enable
+// 3 = GND_d = N/C
+// 4 = RX+   = P2 Latch
+// 5 = RX-   = P2 Data
+
+
+always_comb begin
+	USER_OUT= 6'b111111;
+	if (llapi_select) begin
+		USER_OUT[0] = llapi_latch_o;
+		USER_OUT[1] = llapi_data_o;
+		USER_OUT[2] = ~(llapi_select & ~OSD_STATUS); // LED for Blister
+		USER_OUT[4] = llapi_latch_o2;
+		USER_OUT[5] = llapi_data_o2;
+	end
+end
+
+
+//Port 1 conf
+LLAPI llapi
+(
+	.CLK_50M(CLK_50M),
+	.LLAPI_SYNC(vblank),
+	.IO_LATCH_IN(USER_IN[0]),
+	.IO_LATCH_OUT(llapi_latch_o),
+	.IO_DATA_IN(USER_IN[1]),
+	.IO_DATA_OUT(llapi_data_o),
+	.ENABLE(llapi_select & ~OSD_STATUS),
+	.LLAPI_BUTTONS(llapi_buttons),
+	.LLAPI_ANALOG(llapi_analog),
+	.LLAPI_TYPE(llapi_type),
+	.LLAPI_EN(llapi_en)
+);
+
+//Port 2 conf
+LLAPI llapi2
+(
+	.CLK_50M(CLK_50M),
+	.LLAPI_SYNC(vblank),
+	.IO_LATCH_IN(USER_IN[4]),
+	.IO_LATCH_OUT(llapi_latch_o2),
+	.IO_DATA_IN(USER_IN[5]),
+	.IO_DATA_OUT(llapi_data_o2),
+	.ENABLE(llapi_select & ~OSD_STATUS),
+	.LLAPI_BUTTONS(llapi_buttons2),
+	.LLAPI_ANALOG(llapi_analog2),
+	.LLAPI_TYPE(llapi_type2),
+	.LLAPI_EN(llapi_en2)
+);
+
+reg llapi_button_pressed, llapi_button_pressed2;
+
+always @(posedge CLK_50M) begin
+        if (RESET) begin
+                llapi_button_pressed  <= 0;
+                llapi_button_pressed2 <= 0;
+	end else begin
+	       	if (|llapi_buttons)
+                	llapi_button_pressed  <= 1;
+        	if (|llapi_buttons2)
+                	llapi_button_pressed2 <= 1;
+	end
+end
+
+// controller id is 0 if there is either an Atari controller or no controller
+// if id is 0, assume there is no controller until a button is pressed
+// also check for 255 and treat that as 'no controller' as well
+wire use_llapi  = llapi_en  && llapi_select && ((|llapi_type  && ~(&llapi_type))  || llapi_button_pressed);
+wire use_llapi2 = llapi_en2 && llapi_select && ((|llapi_type2 && ~(&llapi_type2)) || llapi_button_pressed2);
+
+// Indexes:
+// 0 = D+    = P1 Latch
+// 1 = D-    = P1 Data
+// 2 = TX-   = LLAPI Enable
+// 3 = GND_d = N/C
+// 4 = RX+   = P2 Latch
+// 5 = RX-   = P2 Data
+
+//Controller string provided by core for reference (order is important)
+//Controller specific mapping based on type. More info here : https://docs.google.com/document/d/12XpxrmKYx_jgfEPyw-O2zex1kTQZZ-NSBdLO2RQPRzM/edit
+//llapi_Buttons id are HID id - 1
+
+//Port 1 mapping
+
+wire [19:0] joy_ll_a;
+wire [7:0] axis_ll_a_lx;
+wire [7:0] axis_ll_a_ly;
+
+always_comb begin
+	// map for N64 controller with stick range fix
+	if (llapi_type == 19) begin
+		joy_ll_a = {
+			llapi_buttons[2], llapi_buttons[3], llapi_buttons[9], llapi_buttons[8], llapi_buttons[4], //  LEFT DOWN RIGHT UP Z
+			llapi_buttons[7],  llapi_buttons[6], // RT LT
+			llapi_buttons[5], 					 // Start
+			llapi_buttons[0], llapi_buttons[1], // B A
+			llapi_buttons[27], llapi_buttons[26], llapi_buttons[25], llapi_buttons[24] // d-pad
+		};
+		axis_ll_a_lx = llapi_analog[7:0] - 128; //Left stick X
+		axis_ll_a_ly = llapi_analog[15:8] - 128; //Left stick Y
+	end else begin
+		joy_ll_a = {
+			llapi_buttons[2], llapi_buttons[3], llapi_buttons[9], llapi_buttons[8], llapi_buttons[4], //  LEFT DOWN RIGHT UP Z
+			llapi_buttons[7],  llapi_buttons[6], // RT LT
+			llapi_buttons[5], 					 // Start
+			llapi_buttons[0], llapi_buttons[1], // B A
+			llapi_buttons[27], llapi_buttons[26], llapi_buttons[25], llapi_buttons[24] // d-pad
+		};
+		axis_ll_a_lx = llapi_analog[7:0] - 128; //Left stick X
+		axis_ll_a_ly = llapi_analog[15:8] - 128; //Left stick Y	
+		end
+end
+
+//Port 2 mapping
+
+wire [19:0] joy_ll_b;
+wire [7:0] axis_ll_b_lx;
+wire [7:0] axis_ll_b_ly;
+
+always_comb begin
+	// map for N64 controller with stick range fix
+	if (llapi_type2 == 19) begin
+		joy_ll_b = {
+			llapi_buttons2[2], llapi_buttons2[3], llapi_buttons2[9], llapi_buttons2[8], llapi_buttons2[4], //  LEFT DOWN RIGHT UP Z
+			llapi_buttons2[7],  llapi_buttons2[6], // RT LT
+			llapi_buttons2[5], 					 // Start
+			llapi_buttons2[0], llapi_buttons2[1], // B A
+			llapi_buttons2[27], llapi_buttons2[26], llapi_buttons2[25], llapi_buttons2[24] // d-pad
+		};
+		axis_ll_b_lx = llapi_analog2[7:0] - 128; //Left stick X
+		axis_ll_b_ly = llapi_analog2[15:8] - 128; //Left stick Y
+	end else begin
+		joy_ll_b = {
+			llapi_buttons2[2], llapi_buttons2[3], llapi_buttons2[9], llapi_buttons2[8], llapi_buttons2[4], //  LEFT DOWN RIGHT UP Z
+			llapi_buttons2[7],  llapi_buttons2[6], // RT LT
+			llapi_buttons2[5], 					 // Start
+			llapi_buttons2[0], llapi_buttons2[1], // B A
+			llapi_buttons2[27], llapi_buttons2[26], llapi_buttons2[25], llapi_buttons2[24] // d-pad
+		};
+		axis_ll_b_lx = llapi_analog2[7:0] - 128; //Left stick X
+		axis_ll_b_ly = llapi_analog2[15:8] - 128; //Left stick Y	
+	end
+end
+
+//Assign (DOWN + START + FIRST BUTTON) Combinaison to bring the OSD up - P1 and P2 ports.
+wire llapi_osd = (llapi_buttons[26] & llapi_buttons[5] & llapi_buttons[0]) || (llapi_buttons2[26] & llapi_buttons2[5] & llapi_buttons2[0]);
+
+// if LLAPI is enabled, shift USB controllers over to the next available player slot
+always_comb begin
+         if (use_llapi & use_llapi2) begin
+                joy = joy_ll_a;
+                joy2 = joy_ll_b;
+                joy3 = joy_usb_0;
+                joy4 = joy_usb_1;
+				
+				joystick_analog_l0 = {axis_ll_a_ly, axis_ll_a_lx};
+				
+				joystick_analog_l1 = {axis_ll_b_ly, axis_ll_b_lx};	
+				
+				joystick_analog_l2 = joystick_usb_analog_l0;
+				
+				joystick_analog_l3 = joystick_usb_analog_l1;
+	
+        end else if (use_llapi ^ use_llapi2) begin
+                joy = use_llapi  ? joy_ll_a : joy_usb_0;
+                joy2 = use_llapi2 ? joy_ll_b : joy_usb_0;
+                joy3 = joy_usb_1;
+                joy4 = joy_usb_2;
+				
+				joystick_analog_l0 = use_llapi ? {axis_ll_a_ly, axis_ll_a_lx} : joystick_usb_analog_l0;
+				
+				joystick_analog_l1 = use_llapi2 ? {axis_ll_a_ly, axis_ll_a_lx} : joystick_usb_analog_l0;
+				
+				joystick_analog_l2 = joystick_usb_analog_l1;
+				
+				joystick_analog_l3 = joystick_usb_analog_l2;
+				
+        end else begin
+                joy = joy_usb_0;
+                joy2 = joy_usb_1;
+                joy3 = joy_usb_2;
+                joy4 = joy_usb_3;
+				
+				joystick_analog_l0 = joystick_usb_analog_l0;
+				
+				joystick_analog_l1 = joystick_usb_analog_l1;
+				
+				joystick_analog_l2 = joystick_usb_analog_l2;
+				
+				joystick_analog_l3 = joystick_usb_analog_l3;
+        end
+end
+
+//////////////////  END LLAPI   ///////////////////
+
 
 ////////////////////////////  SYSTEM  ///////////////////////////////////
 
@@ -949,6 +1189,8 @@ wire [7:0]toPIF_data;
 //rx- io[5] pad3
 //rx+ io[4] pad4
 
+//LAPI
+/*
 always @(posedge clk_1x) begin
 	if (snac) begin
 		case (command_padindex)
@@ -975,7 +1217,7 @@ always @(posedge clk_1x) begin
 	end else begin
 		USER_OUT <= '1;
 	end
-end
+end*/
 
 N64_SNAC N64_SNAC_inst
 (
