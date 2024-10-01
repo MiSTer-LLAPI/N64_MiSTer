@@ -77,7 +77,7 @@ localparam NO_WRITE_BURST      = 1'b1;     // 0= write burst enabled, 1=only sin
 localparam MODE                = {3'b000, NO_WRITE_BURST, OP_MODE, CAS_LATENCY, ACCESS_TYPE, BURST_CODE};
 
 localparam sdram_startup_cycles= 14'd12100;// 100us, plus a little more, @ 100MHz
-localparam cycles_per_refresh  = 14'd500;  // (64000*64)/8192-1 Calc'd as (64ms @ 64MHz)/8192 rose
+localparam cycles_per_refresh  = 14'd300;  // (64000*64)/8192-1 Calc'd as (64ms @ 64MHz)/8192 rose
 localparam startup_refresh_max = 14'b11111111111111;
 
 // SDRAM commands
@@ -212,7 +212,7 @@ always @(posedge clk) begin
 		end
 
 		STATE_IDLE: begin
-			if (refresh_count > (cycles_per_refresh << 1)) begin
+			if (refresh_count > cycles_per_refresh) begin
 				// Priority is to issue a refresh if one is outstanding
 				state <= STATE_IDLE_1;
 			end
