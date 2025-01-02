@@ -32,8 +32,6 @@ entity RDP_TexFetch is
             
       tex_addr             : out tTextureRamAddr;
       tex_data_in          : in  tTextureRamData;
-      PaletteAddr          : out tPaletteRamAddr;
-      PaletteRamData       : in  tPaletteRamData;
       
       -- synthesis translate_off
       export_TextureAddr   : out tcolor4_u12;
@@ -83,9 +81,7 @@ architecture arch of RDP_TexFetch is
    signal settings_tile0_1       : tsettings_tile := SETTINGSTILEINIT; 
    signal settings_tile1_1       : tsettings_tile := SETTINGSTILEINIT; 
    signal tex_data_1             : tTextureRamData := (others => (others => '0'));   
-   signal tex_data               : tTextureRamData;      
-   signal pal_data_1             : tPaletteRamData := (others => (others => '0'));   
-   signal pal_data               : tPaletteRamData;   
+   signal tex_data               : tTextureRamData;   
    
    signal frac_S_1               : unsigned(4 downto 0);
    signal frac_T_1               : unsigned(4 downto 0);   
@@ -375,11 +371,6 @@ begin
             when others => null;
          end case;
       end if;
-      
-      PaletteAddr(0) <= tex_addr(4);
-      PaletteAddr(1) <= tex_addr(5);
-      PaletteAddr(2) <= tex_addr(6);
-      PaletteAddr(3) <= tex_addr(7);
 
       -- synthesis translate_off
       export_TextureAddr(0) <= addr_calcR0(12 downto 1);
@@ -443,7 +434,6 @@ begin
       
          if (trigger = '1' or step2 = '1') then
             tex_data_1 <= tex_data_in;
-            pal_data_1 <= PaletteRamData;
          end if;
 
          if (trigger = '1') then
@@ -507,8 +497,7 @@ begin
       end if;
    end process;
    
-   tex_data <= tex_data_in    when (mode2 = '0') else tex_data_1;
-   pal_data <= PaletteRamData when (mode2 = '0') else pal_data_1;
+   tex_data <= tex_data_in when (mode2 = '0') else tex_data_1;
    
    -- data select   
    tex_in0 <= unsigned(tex_data(select0));
@@ -567,7 +556,7 @@ begin
       data16               => tex_in0,
       data32               => tex_in0 & tex_in4,  
       dataY                => texY,
-      palette16            => unsigned(pal_data(0)),     
+      palette16            => unsigned(tex_data(4)),     
       
       -- synthesis translate_off
       addr_base_1          => addr_base_1,       
@@ -600,7 +589,7 @@ begin
       data16               => tex_in1,
       data32               => tex_in1 & tex_in5,  
       dataY                => 8x"00",
-      palette16            => unsigned(pal_data(1)), 
+      palette16            => unsigned(tex_data(5)),     
       
       -- synthesis translate_off
       addr_base_1          => addr_base_1,       
@@ -633,7 +622,7 @@ begin
       data16               => tex_in2,
       data32               => tex_in2 & tex_in6,  
       dataY                => 8x"00",
-      palette16            => unsigned(pal_data(2)), 
+      palette16            => unsigned(tex_data(6)),     
       
       -- synthesis translate_off
       addr_base_1          => addr_base_1N,       
@@ -666,7 +655,7 @@ begin
       data16               => tex_in3,
       data32               => tex_in3 & tex_in7,  
       dataY                => 8x"00",
-      palette16            => unsigned(pal_data(3)),    
+      palette16            => unsigned(tex_data(7)),     
       
       -- synthesis translate_off
       addr_base_1          => addr_base_1N,       
