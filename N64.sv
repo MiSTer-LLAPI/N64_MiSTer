@@ -870,6 +870,16 @@ always_comb begin
 				joystick_analog_l1 = joystick_usb_analog_l0;	
 				joystick_analog_l2 = joystick_usb_analog_l1;
 				joystick_analog_l3 = joystick_usb_analog_l2;
+		end else if (OSD_STATUS) begin
+               	joy = 0;
+                joy2 = 0;
+                joy3 = 0;
+                joy4 = 0;
+				
+				joystick_analog_l0 = {8'b0,8'b0};
+				joystick_analog_l1 = {8'b0,8'b0};	
+				joystick_analog_l2 = {8'b0,8'b0};
+				joystick_analog_l3 = {8'b0,8'b0};
         end else begin
                 joy = joy_ll_a;
                 joy2 = joy_ll_b;
@@ -882,8 +892,6 @@ always_comb begin
 				joystick_analog_l3 = joystick_usb_analog_l1;
 		end
 end
-
-//////////////////  END LLAPI   ///////////////////
 
 
 ////////////////////////////  SYSTEM  ///////////////////////////////////
