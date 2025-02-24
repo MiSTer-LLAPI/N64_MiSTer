@@ -734,13 +734,13 @@ wire [71:0] llapi_analog, llapi_analog2;
 wire [7:0]  llapi_type, llapi_type2;
 wire llapi_en, llapi_en2;
 wire llapi_latch_o, llapi_latch_o2, llapi_data_o, llapi_data_o2;
-wire [11:0] joy_ll_a;
-wire [11:0] joy_ll_b;
+wire [13:0] joy_ll_a;
+wire [13:0] joy_ll_b;
 wire [7:0] axis_ll_a_lx;
 wire [7:0] axis_ll_a_ly;
 wire [7:0] axis_ll_b_lx;
 wire [7:0] axis_ll_b_ly;
-wire [11:0] joy_0, joy_1, joy_2, joy_3, joy_4;
+wire [13:0] joy_0, joy_1, joy_2, joy_3, joy_4;
 
 //Assign (DOWN + START + FIRST BUTTON) Combinaison to bring the OSD up - P1 and P2 ports.
 wire llapi_osd = (llapi_buttons[26] & llapi_buttons[5] & llapi_buttons[0]) || (llapi_buttons2[26] & llapi_buttons2[5] & llapi_buttons2[0]);
