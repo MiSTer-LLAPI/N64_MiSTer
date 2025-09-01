@@ -16,7 +16,6 @@
 //  with this program; if not, write to the Free Software Foundation, Inc.,
 //  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 //============================================================================
-//LLAPI: llapi.sv needs to be in rtl folder and needs to be declared in file.qip (set_global_assignment -name SYSTEMVERILOG_FILE rtl/llapi.sv)
 
 module emu
 (
@@ -55,7 +54,9 @@ module emu
 
 	input  [11:0] HDMI_WIDTH,
 	input  [11:0] HDMI_HEIGHT,
-   output        HDMI_FREEZE,
+   output         HDMI_FREEZE,
+   output         HDMI_BLACKOUT,
+   output         HDMI_BOB_DEINT,
 
 `ifdef MISTER_FB
 	// Use framebuffer in DDRAM
@@ -173,7 +174,9 @@ module emu
 	input         OSD_STATUS
 );
 
-assign HDMI_FREEZE = 1'b0;
+assign HDMI_FREEZE = 0;
+assign HDMI_BLACKOUT = 0;
+assign HDMI_BOB_DEINT = 0;
 
 assign AUDIO_S   = 1;
 assign AUDIO_MIX = status[8:7];
@@ -190,7 +193,7 @@ assign {SD_SCK, SD_MOSI, SD_CS} = 'Z;
 assign {SDRAM_DQ, SDRAM_A, SDRAM_BA, SDRAM_CLK, SDRAM_CKE, SDRAM_DQML, SDRAM_DQMH, SDRAM_nWE, SDRAM_nCAS, SDRAM_nRAS, SDRAM_nCS} = 'Z;
 
 assign FB_BASE    = video_FB_base;
-assign FB_EN      = status[105];
+assign FB_EN      = video_FB_en;
 assign FB_FORMAT  = 5'b00110;
 assign FB_WIDTH   = {2'd0, video_FB_sizeX};
 assign FB_HEIGHT  = {2'd0, video_FB_sizeY};
@@ -290,12 +293,6 @@ wire reset_or = RESET | buttons[1] | status[0];
 `include "build_id.v"
 parameter CONF_STR = {
 	"N64;SS3C000000:1000000;",
-	//LLAPI: OSD menu item
-	//LLAPI Always ON
-	"-,>> LLAPI enabled core    <<;",
-	"-,>> Connect USER I/O port <<;",
-	"-;",
-	//END LLAPI	
    "FS1,N64z64n64v64,Load,32000000;",
    "F2,GBCGB ,Load GB-Transfer;",
    "-;",
@@ -407,38 +404,27 @@ wire  [1:0] buttons;
 wire [127:0] status;
 wire        forced_scandoubler;
 
-//LLAPI rename HPS controller to USB
-
-wire [19:0] joy_usb_0;
-wire [19:0] joy_usb_1;
-wire [19:0] joy_usb_2;
-wire [19:0] joy_usb_3;
-
 wire [19:0] joy;
 wire [19:0] joy_unmod;
 wire [19:0] joy2;
 wire [19:0] joy3;
 wire [19:0] joy4;
 
-wire [15:0] joystick_usb_analog_l0;
-wire [15:0] joystick_usb_analog_l1;
-wire [15:0] joystick_usb_analog_l2;
-wire [15:0] joystick_usb_analog_l3;
-
 wire [15:0] joystick_analog_l0;
 wire [15:0] joystick_analog_l1;
 wire [15:0] joystick_analog_l2;
 wire [15:0] joystick_analog_l3;
 
-//END LLAPI
-
 wire [24:0] mouse;
 
 wire [10:0] ps2_key;
 
+wire        fixed_blanks_off = status[82];
+wire        clean_hdmi = status[105];
+wire        video_FB_en;
+
 wire [127:0] status_in = {status[127:40],ss_slot,status[37:0]};
- 
-wire [15:0] status_menumask = {14'd0, status[105], status[82]};
+wire [15:0] status_menumask = {14'd0, clean_hdmi, fixed_blanks_off};
 
 wire DIRECT_VIDEO;
 
@@ -483,12 +469,10 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(1)) hps_io
 	.ioctl_index(ioctl_index),
 	.ioctl_wait(ioctl_wait),
 
-//LLAPI HPS controller renamed to usb
-	.joystick_0(joy_unmod),
-	.joystick_1(joy_usb_1),
-	.joystick_2(joy_usb_2),
-	.joystick_3(joy_usb_3),
-//END LLAPI
+   .joystick_0(joy_unmod),
+	.joystick_1(joy2),
+	.joystick_2(joy3),
+	.joystick_3(joy4),
 	.ps2_key(ps2_key),
 
 	.status(status),
@@ -499,12 +483,10 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(1)) hps_io
 	.info_req(info_req),
 	.info(info_index),
    
-//LLAPI HPS controller renamed to usb
-   .joystick_l_analog_0(joystick_usb_analog_l0),  
-   .joystick_l_analog_1(joystick_usb_analog_l1),   
-   .joystick_l_analog_2(joystick_usb_analog_l2),   
-   .joystick_l_analog_3(joystick_usb_analog_l3),
- //LAPI END
+   .joystick_l_analog_0(joystick_analog_l0), 
+   .joystick_l_analog_1(joystick_analog_l1),
+   .joystick_l_analog_2(joystick_analog_l2),
+   .joystick_l_analog_3(joystick_analog_l3),
    
    .joystick_0_rumble(rumble[0] ? 16'hFFFF : 16'h0000),
    .joystick_1_rumble(rumble[1] ? 16'hFFFF : 16'h0000),
@@ -529,9 +511,7 @@ hps_io #(.CONF_STR(CONF_STR), .WIDE(1)) hps_io
    .direct_video(DIRECT_VIDEO)
 );
 
-//LLAPI
-assign joy_usb_0 = joy_unmod; //joy_unmod[14] ? 20'b0 : joy_unmod;
-//LLAPI
+assign joy = joy_unmod; //joy_unmod[14] ? 20'b0 : joy_unmod;
 
 ////////////////////////////  PIFROM download  ///////////////////////////////////
 
@@ -613,8 +593,7 @@ always @(posedge clk_1x) begin
 end
 
 // Pop OSD menu if no rom has been loaded automatically
-assign BUTTONS[0]   = osd_btn | llapi_osd;
-//LLAPI
+assign BUTTONS[0] = osd_btn;
 assign BUTTONS[1] = 0;
 
 reg osd_btn = 0;
@@ -727,188 +706,6 @@ always @(posedge clk_1x) begin
 	end
 end
 
-///////////////////   LLAPI   ///////////////////
-
-wire [31:0] llapi_buttons, llapi_buttons2;
-wire [71:0] llapi_analog, llapi_analog2;
-wire [7:0]  llapi_type, llapi_type2;
-wire llapi_en, llapi_en2;
-wire llapi_latch_o, llapi_latch_o2, llapi_data_o, llapi_data_o2;
-wire [13:0] joy_ll_a;
-wire [13:0] joy_ll_b;
-wire [7:0] axis_ll_a_lx;
-wire [7:0] axis_ll_a_ly;
-wire [7:0] axis_ll_b_lx;
-wire [7:0] axis_ll_b_ly;
-wire [13:0] joy_0, joy_1, joy_2, joy_3, joy_4;
-
-//Assign (DOWN + START + FIRST BUTTON) Combinaison to bring the OSD up - P1 and P2 ports.
-wire llapi_osd = (llapi_buttons[26] & llapi_buttons[5] & llapi_buttons[0]) || (llapi_buttons2[26] & llapi_buttons2[5] & llapi_buttons2[0]);
-
-// LLAPI Indexes:
-// 0 = D+    = P1 Latch
-// 1 = D-    = P1 Data
-// 2 = TX-   = LLAPI Enable
-// 3 = GND_d = N/C
-// 4 = RX+   = P2 Latch
-// 5 = RX-   = P2 Data
-
-always_comb begin
-		USER_OUT[0] = llapi_latch_o;
-		USER_OUT[1] = llapi_data_o;
-		USER_OUT[2] = OSD_STATUS; // Blister LED
-		USER_OUT[4] = llapi_latch_o2;
-		USER_OUT[5] = llapi_data_o2;
-end
-
-//Port 1 conf
-LLAPI llapi
-(
-	.CLK_50M(CLK_50M),
-	.LLAPI_SYNC(vblank),
-	.IO_LATCH_IN(USER_IN[0]),
-	.IO_LATCH_OUT(llapi_latch_o),
-	.IO_DATA_IN(USER_IN[1]),
-	.IO_DATA_OUT(llapi_data_o),
-	.ENABLE(~OSD_STATUS), // Disable LLAPI mode when Core OSD is open
-	.LLAPI_BUTTONS(llapi_buttons),
-	.LLAPI_ANALOG(llapi_analog),
-	.LLAPI_TYPE(llapi_type),
-	.LLAPI_EN(llapi_en)
-);
-
-//Port 2 conf
-LLAPI llapi2
-(
-	.CLK_50M(CLK_50M),
-	.LLAPI_SYNC(vblank),
-	.IO_LATCH_IN(USER_IN[4]),
-	.IO_LATCH_OUT(llapi_latch_o2),
-	.IO_DATA_IN(USER_IN[5]),
-	.IO_DATA_OUT(llapi_data_o2),
-	.ENABLE(~OSD_STATUS), // Disable LLAPI mode when Core OSD is open
-	.LLAPI_BUTTONS(llapi_buttons2),
-	.LLAPI_ANALOG(llapi_analog2),
-	.LLAPI_TYPE(llapi_type2),
-	.LLAPI_EN(llapi_en2)
-);
-
-// controller id is 0 if there is either an Atari controller or no controller
-// if id is 0, assume there is no controller
-// also check for 255 ('Searching mode') and treat that as 'no controller' as well
-wire use_llapi  = llapi_en && ((|llapi_type  && ~(&llapi_type))); //  || llapi_button_pressed);
-wire use_llapi2 = llapi_en2 && ((|llapi_type2 && ~(&llapi_type2))); // || llapi_button_pressed2);
-
-//Controller string provided by core for reference (order is important)
-//Controller specific mapping based on type. More info here : https://docs.google.com/document/d/12XpxrmKYx_jgfEPyw-O2zex1kTQZZ-NSBdLO2RQPRzM/edit
-//llapi_Buttons id are HID id - 1
-
-
-//Port 1 mapping
-
-always_comb begin
-	// map for N64 controller with stick range fix
-	if (llapi_type == 19) begin
-		joy_ll_a = {
-			llapi_buttons[2], llapi_buttons[3], llapi_buttons[9], llapi_buttons[8], llapi_buttons[4], //  LEFT DOWN RIGHT UP Z
-			llapi_buttons[7],  llapi_buttons[6], // RT LT
-			llapi_buttons[5], 					 // Start
-			llapi_buttons[0], llapi_buttons[1], // B A
-			llapi_buttons[27], llapi_buttons[26], llapi_buttons[25], llapi_buttons[24] // d-pad
-		};
-		axis_ll_a_lx = llapi_analog[7:0] - 128; //Left stick X
-		axis_ll_a_ly = llapi_analog[15:8] - 128; //Left stick Y
-	end else begin
-		joy_ll_a = {
-			llapi_buttons[2], llapi_buttons[3], llapi_buttons[9], llapi_buttons[8], llapi_buttons[4], //  LEFT DOWN RIGHT UP Z
-			llapi_buttons[7],  llapi_buttons[6], // RT LT
-			llapi_buttons[5], 					 // Start
-			llapi_buttons[0], llapi_buttons[1], // B A
-			llapi_buttons[27], llapi_buttons[26], llapi_buttons[25], llapi_buttons[24] // d-pad
-		};
-		axis_ll_a_lx = llapi_analog[7:0] - 128; //Left stick X
-		axis_ll_a_ly = llapi_analog[15:8] - 128; //Left stick Y	
-		end
-end
-
-//Port 2 mapping
-
-always_comb begin
-	// map for N64 controller with stick range fix
-	if (llapi_type2 == 19) begin
-		joy_ll_b = {
-			llapi_buttons2[2], llapi_buttons2[3], llapi_buttons2[9], llapi_buttons2[8], llapi_buttons2[4], //  LEFT DOWN RIGHT UP Z
-			llapi_buttons2[7],  llapi_buttons2[6], // RT LT
-			llapi_buttons2[5], 					 // Start
-			llapi_buttons2[0], llapi_buttons2[1], // B A
-			llapi_buttons2[27], llapi_buttons2[26], llapi_buttons2[25], llapi_buttons2[24] // d-pad
-		};
-		axis_ll_b_lx = llapi_analog2[7:0] - 128; //Left stick X
-		axis_ll_b_ly = llapi_analog2[15:8] - 128; //Left stick Y
-	end else begin
-		joy_ll_b = {
-			llapi_buttons2[2], llapi_buttons2[3], llapi_buttons2[9], llapi_buttons2[8], llapi_buttons2[4], //  LEFT DOWN RIGHT UP Z
-			llapi_buttons2[7],  llapi_buttons2[6], // RT LT
-			llapi_buttons2[5], 					 // Start
-			llapi_buttons2[0], llapi_buttons2[1], // B A
-			llapi_buttons2[27], llapi_buttons2[26], llapi_buttons2[25], llapi_buttons2[24] // d-pad
-		};
-		axis_ll_b_lx = llapi_analog2[7:0] - 128; //Left stick X
-		axis_ll_b_ly = llapi_analog2[15:8] - 128; //Left stick Y	
-	end
-end
-
-
-
-// Player / LLAPI port allocation
-always_comb begin
-        if (~use_llapi & use_llapi2) begin
-               	joy = joy_ll_b;
-                joy2 = joy_usb_0;
-                joy3 = joy_usb_1;
-                joy4 = joy_usb_2;
-				
-				joystick_analog_l0 = {axis_ll_b_ly, axis_ll_b_lx};
-				joystick_analog_l1 = joystick_usb_analog_l0;	
-				joystick_analog_l2 = joystick_usb_analog_l1;
-				joystick_analog_l3 = joystick_usb_analog_l2;
-				
-		end else if (use_llapi & ~use_llapi2) begin
-               	joy = joy_ll_a;
-                joy2 = joy_usb_0;
-                joy3 = joy_usb_1;
-                joy4 = joy_usb_2;
-				
-				joystick_analog_l0 = {axis_ll_a_ly, axis_ll_a_lx};
-				joystick_analog_l1 = joystick_usb_analog_l0;	
-				joystick_analog_l2 = joystick_usb_analog_l1;
-				joystick_analog_l3 = joystick_usb_analog_l2;
-		
-        end else if (use_llapi & use_llapi2) begin
-                joy = joy_ll_a;
-                joy2 = joy_ll_b;
-                joy3 = joy_usb_0;
-                joy4 = joy_usb_1;
-				
-				joystick_analog_l0 = {axis_ll_a_ly, axis_ll_a_lx};
-				joystick_analog_l1 = {axis_ll_b_ly, axis_ll_b_lx};	
-				joystick_analog_l2 = joystick_usb_analog_l0;
-				joystick_analog_l3 = joystick_usb_analog_l1;
-				
-		end else begin
-                joy = 0;
-                joy2 = 0;
-                joy3 = 0;
-                joy4 = 0;
-				
-				joystick_analog_l0 = {8'b0,8'b0};
-				joystick_analog_l1 = {8'b0,8'b0};	
-				joystick_analog_l2 = {8'b0,8'b0};
-				joystick_analog_l3 = {8'b0,8'b0};
-		end
-end
-
-
 ////////////////////////////  SYSTEM  ///////////////////////////////////
 
 wire HBlank;
@@ -941,7 +738,8 @@ n64top
    .fpscountOn(status[28]),
    
    .ISPAL(status[79]),
-   .FIXEDBLANKS(~status[82] && ~status[105]),
+   .FIXEDBLANKS(~fixed_blanks_off && ~clean_hdmi),
+   
    .CROPVERTICAL(status[45:44]),
    .VI_BILINEAROFF(status[32]),
    .VI_DEBLUR(status[89]),
@@ -952,7 +750,7 @@ n64top
    .VI_DIVOTOFF(status[36]),
    .VI_NOISEOFF(status[37]),
    .VI_7BITPERCOLOR(~status[104]),
-   .VI_DIRECTFBMODE(status[105]),
+   .VI_DIRECTFBMODE(clean_hdmi),
    
    .CICTYPE(status[68:65]),
    .RAMSIZE8(~status[70]),
@@ -1102,14 +900,15 @@ n64top
    .video_g          (VGA_G),
    .video_b          (VGA_B),
    
+   .video_FB_en      (video_FB_en),
    .video_FB_base    (video_FB_base),
    .video_FB_sizeX   (video_FB_sizeX),
    .video_FB_sizeY   (video_FB_sizeY)
 );
 
 assign CLK_VIDEO = clk_vid;
-assign VGA_DE = status[105] ? 1'b0 : ~(HBlank | VBlank);
-assign VGA_F1 = status[105] ? 1'b0 : Interlaced ^ status[1];
+assign VGA_DE = ~(HBlank | VBlank);
+assign VGA_F1 = clean_hdmi ? 1'b0 : Interlaced ^ status[1];
 assign VGA_SL = 0;
 assign VGA_DISABLE = 0;
 
@@ -1119,7 +918,7 @@ reg [11:0] ARCoreX = 12'd4;
 reg [11:0] ARCoreY = 12'd3;
    
 always @(posedge clk_1x) begin
-   if (status[82] || status[105]) begin // fixed blanks off
+   if (fixed_blanks_off || clean_hdmi) begin // fixed blanks off
       ARCoreX <= 12'd4;
       ARCoreY <= 12'd3;
    end else begin
@@ -1164,8 +963,6 @@ wire [7:0]toPIF_data;
 //rx- io[5] pad3
 //rx+ io[4] pad4
 
-//LAPI
-/*
 always @(posedge clk_1x) begin
 	if (snac) begin
 		case (command_padindex)
@@ -1192,7 +989,7 @@ always @(posedge clk_1x) begin
 	end else begin
 		USER_OUT <= '1;
 	end
-end*/
+end
 
 N64_SNAC N64_SNAC_inst
 (
