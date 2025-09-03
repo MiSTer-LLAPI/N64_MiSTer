@@ -168,7 +168,13 @@ typedef enum bit [3:0] {
 	STATE_READ_END
 } execution_state;
 
-logic [20:0]  cycle, count, poll_offset, poll_counter, poll_offset_latch, sync_counter;
+logic [20:0]  	cycle,
+				count,
+				poll_offset,
+				poll_counter,
+				poll_offset_latch,
+				sync_counter;
+
 logic [31:0]  write_buffer;
 logic [3:0]   write_length;
 logic [2:0]   read_bit; // Relies on overflow
@@ -187,8 +193,10 @@ logic latch;
 logic is_latched;
 logic data_in, data_out;
 logic enable;
-logic old_sync, new_sync, old_data;
-logic new_rumble, old_rumble;
+logic 	old_sync,
+		new_sync,
+		old_data,
+		has_been_rumbling = 1'b0;
 
 execution_stage stage = READ_IDLE;
 execution_state state = STATE_IDLE;
@@ -214,7 +222,6 @@ always_ff @(posedge CLK_50M) begin
 	old_sync <= new_sync;
 	new_sync <= LLAPI_SYNC;
 	cycle <= cycle + 1'b1;
-	new_rumble <= N64_RUMBLE;
 
 	if (~latch) begin
 		is_latched <= ~IO_LATCH_IN;
@@ -260,37 +267,28 @@ always_ff @(posedge CLK_50M) begin
 				end
 			end else if (stage == WRITE_RUMBLE_PARAMS) begin
 				if (cycle > TIME_WAIT) begin
-					if (new_rumble && ~old_rumble) begin // Let's get ready to...
-						old_rumble <= new_rumble;
+					if (N64_RUMBLE) begin // Let's get ready to...
 						cycle <= 0;
 						stage <= WRITE_RUMBLE;
 						state <= STATE_WRITE_START;
-						write_buffer <= {8'hFF, 8'hFF, 8'hFF, LLAPI_RUMBLE_PARMS}; // Write rumble with params Level 0xFF, Duration High 0xff, Duration Low 0xFF
-					end else if (~new_rumble && old_rumble) begin // Time to stop rumble
-						old_rumble <= new_rumble;
+						write_buffer <= {LLAPI_RUMBLE_PARMS, 8'hFF, 8'h00, 8'h04}; // Write rumble with params Level 0xFF, Duration High 0xff, Duration Low 0xFF
+					/*end else if (has_been_rumbling) begin // Time to stop rumble
+						has_been_rumbling <= 1'b0;
 						cycle <= 0;
 						stage <= READ_IDLE;
 						state <= STATE_WRITE_START;
-						write_buffer <= {24'd0, LLAPI_RUBMLE_CONST_END}; // Write stop rumble
+						write_buffer <= {24'd0, LLAPI_RUBMLE_CONST_END}; // Write stop rumble*/
 					end else begin
 						stage <= READ_IDLE;
 					end
 				end 
 			end else if (stage == WRITE_RUMBLE) begin
-				if (cycle > TIME_WAIT) begin
-					if (new_rumble) begin // Rumble!
-						old_rumble <= new_rumble;
-						cycle <= 0;
-						stage <= READ_IDLE;
-						state <= STATE_WRITE_START;
-						write_buffer <= {24'd0, LLAPI_RUMBLE_CONST_START_FROM_PARMS}; // Write rumble
-					end else begin // Time to stop rumble
-						old_rumble <= new_rumble;
-						cycle <= 0;
-						stage <= READ_IDLE;
-						state <= STATE_WRITE_START;
-						write_buffer <= {24'd0, LLAPI_RUBMLE_CONST_END}; // Write rumble with params Level 0xFF, Duration High 0xff, Duration Low 0xFF
-					end
+				if (cycle > TIME_WAIT) begin // Rumble!
+					has_been_rumbling <= 1'b1;
+					cycle <= 0;
+					stage <= READ_IDLE;
+					state <= STATE_WRITE_START;
+					write_buffer <= {24'd0, LLAPI_RUMBLE_CONST_START_FROM_PARMS}; // Write rumble
 				end 
 			end else if (sync_counter >= (((poll_offset < (poll_time - TIME_BUFFER)) && enable) ?
 				(poll_time - poll_offset) : poll_time)) begin // Trigger timed device poll. Offset can not be > half the poll time.
