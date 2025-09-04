@@ -105,7 +105,8 @@ module LLAPI
 	output [7:0]  LLAPI_TYPE,     // Enumerated controller type, passed to core
 	output [7:0]  LLAPI_MODES,    // Modes that the bliss box may be in, passed to core
 	output [31:0] LLAPI_BUTTONS,  // Vector of buttons, 1 == pressed, passed to core
-	output [71:0] LLAPI_ANALOG    // Unsigned 8 bit vector of analog axis, passed to core
+	output [71:0] LLAPI_ANALOG,    // Unsigned 8 bit vector of analog axis, passed to core
+	input         N64_RUMBLE    // Bit to activate / disable rumble, from core
 );
 
 // Commands
@@ -151,7 +152,8 @@ typedef enum bit [2:0] {
 	READ_STATUS,
 	WRITE_SETUP,
 	WRITE_MODES,
-	READ_MODES
+	READ_MODES,
+	CHECK_RUMBLE
 } execution_stage;
 
 typedef enum bit [3:0] {
@@ -165,7 +167,13 @@ typedef enum bit [3:0] {
 	STATE_READ_END
 } execution_state;
 
-logic [20:0]  cycle, count, poll_offset, poll_counter, poll_offset_latch, sync_counter;
+logic [20:0]  	cycle,
+				count,
+				poll_offset,
+				poll_counter,
+				poll_offset_latch,
+				sync_counter;
+
 logic [31:0]  write_buffer;
 logic [3:0]   write_length;
 logic [2:0]   read_bit; // Relies on overflow
@@ -184,10 +192,13 @@ logic latch;
 logic is_latched;
 logic data_in, data_out;
 logic enable;
-logic old_sync, new_sync, old_data;
+logic 	old_sync,
+		new_sync,
+		old_data,
+		rumble_logic;
 
-execution_stage stage = READ_IDLE;
-execution_state state = STATE_IDLE;
+(* preserve *) execution_stage stage = READ_IDLE;
+(* preserve *) execution_state state = STATE_IDLE;
 
 assign LLAPI_TYPE = lljs_type;
 assign LLAPI_BUTTONS = lljs_buttons;
@@ -210,6 +221,7 @@ always_ff @(posedge CLK_50M) begin
 	old_sync <= new_sync;
 	new_sync <= LLAPI_SYNC;
 	cycle <= cycle + 1'b1;
+	rumble_logic <= N64_RUMBLE;
 
 	if (~latch) begin
 		is_latched <= ~IO_LATCH_IN;
@@ -252,6 +264,18 @@ always_ff @(posedge CLK_50M) begin
 					read_length <= 1'd1;
 					state <= STATE_WRITE_START;
 					write_buffer <= {24'd0, LLAPI_GET_MODES};
+				end
+			end else if (stage == CHECK_RUMBLE) begin
+				if (cycle > TIME_WAIT) begin
+					if (rumble_logic) begin // Let's get ready to...
+						// has_been_rumbling <= 1'b1;
+						cycle <= 0;
+						stage <= READ_IDLE;
+						state <= STATE_WRITE_START;
+						write_buffer <= {24'd0, LLAPI_RUMBLE_CONST_JOLT}; // Write rumble
+					end else begin
+						stage <= READ_IDLE;
+					end
 				end
 			end else if (sync_counter >= (((poll_offset < (poll_time - TIME_BUFFER)) && enable) ?
 				(poll_time - poll_offset) : poll_time)) begin // Trigger timed device poll. Offset can not be > half the poll time.
@@ -413,11 +437,9 @@ always_ff @(posedge CLK_50M) begin
 						lljs_buttons[25] <= lljs_buttons[25] | (lljs_analog[7:0]  < 'd50);
 						lljs_buttons[24] <= lljs_buttons[24] | (lljs_analog[7:0]  > 'd200);
 					end
-					stage <= READ_IDLE;
-				end else begin
-					stage <= READ_IDLE;
 				end
 				cycle <= 0;
+				stage <= CHECK_RUMBLE;
 				state <= STATE_IDLE;
 			end
 		end

@@ -774,7 +774,8 @@ LLAPI llapi
 	.LLAPI_BUTTONS(llapi_buttons),
 	.LLAPI_ANALOG(llapi_analog),
 	.LLAPI_TYPE(llapi_type),
-	.LLAPI_EN(llapi_en)
+	.LLAPI_EN(llapi_en),
+	.N64_RUMBLE(rumble[0])
 );
 
 //Port 2 conf
@@ -790,7 +791,8 @@ LLAPI llapi2
 	.LLAPI_BUTTONS(llapi_buttons2),
 	.LLAPI_ANALOG(llapi_analog2),
 	.LLAPI_TYPE(llapi_type2),
-	.LLAPI_EN(llapi_en2)
+	.LLAPI_EN(llapi_en2),
+	.N64_RUMBLE(rumble[1])
 );
 
 // controller id is 0 if there is either an Atari controller or no controller
