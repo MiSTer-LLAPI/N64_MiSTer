@@ -145,7 +145,7 @@ enum bit [20:0] {
 	TIME_BUFFER = 21'd9500    // 3 scanlines of wiggle room
 } time_periods;
 
-typedef enum bit [3:0] {
+typedef enum bit [2:0] {
 	READ_IDLE,
 	READ_POLL,
 	WRITE_STATUS,
@@ -153,7 +153,6 @@ typedef enum bit [3:0] {
 	WRITE_SETUP,
 	WRITE_MODES,
 	READ_MODES,
-	WRITE_RUMBLE,
 	CHECK_RUMBLE
 } execution_stage;
 
@@ -198,8 +197,8 @@ logic 	old_sync,
 		old_data,
 		rumble_logic;
 
-execution_stage stage = READ_IDLE;
-execution_state state = STATE_IDLE;
+(* preserve *) execution_stage stage = READ_IDLE;
+(* preserve *) execution_state state = STATE_IDLE;
 
 assign LLAPI_TYPE = lljs_type;
 assign LLAPI_BUTTONS = lljs_buttons;
@@ -273,25 +272,11 @@ always_ff @(posedge CLK_50M) begin
 						cycle <= 0;
 						stage <= READ_IDLE;
 						state <= STATE_WRITE_START;
-						// write_buffer <= {LLAPI_RUMBLE_PARMS, 8'hFF, 8'h00, 8'h20}; // Write rumble with params Level 0xFF, Duration High 0xff, Duration Low 0xFF
 						write_buffer <= {24'd0, LLAPI_RUMBLE_CONST_JOLT}; // Write rumble with params Level 0xFF, Duration High 0xff, Duration Low 0xFF
-					// end else if (has_been_rumbling) begin // Time to stop rumble
-					// 	has_been_rumbling <= 1'b0;
-					// 	cycle <= 0;
-					// 	stage <= WRITE_RUMBLE;
-					// 	state <= STATE_WRITE_START;
-					// 	write_buffer <= {LLAPI_RUMBLE_PARMS, 8'h00, 8'h00, 8'h00}; // Write stop rumble
 					end else begin
 						stage <= READ_IDLE;
 					end
-				end 
-			// end else if (stage == WRITE_RUMBLE) begin
-			// 	if (cycle > TIME_WAIT) begin // Rumble!
-			// 		cycle <= 0;
-			// 		stage <= READ_IDLE;
-			// 		state <= STATE_WRITE_START;
-			// 		write_buffer <= {24'd0, LLAPI_RUMBLE_CONST_START_FROM_PARMS}; // Write rumble
-			// 	end 
+				end
 			end else if (sync_counter >= (((poll_offset < (poll_time - TIME_BUFFER)) && enable) ?
 				(poll_time - poll_offset) : poll_time)) begin // Trigger timed device poll. Offset can not be > half the poll time.
 				count <= count + 1'b1;
