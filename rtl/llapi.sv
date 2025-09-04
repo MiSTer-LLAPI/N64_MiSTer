@@ -272,7 +272,7 @@ always_ff @(posedge CLK_50M) begin
 						cycle <= 0;
 						stage <= READ_IDLE;
 						state <= STATE_WRITE_START;
-						write_buffer <= {24'd0, LLAPI_RUMBLE_CONST_JOLT}; // Write rumble with params Level 0xFF, Duration High 0xff, Duration Low 0xFF
+						write_buffer <= {24'd0, LLAPI_RUMBLE_CONST_JOLT}; // Write rumble
 					end else begin
 						stage <= READ_IDLE;
 					end
